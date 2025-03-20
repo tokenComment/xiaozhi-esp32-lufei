@@ -33,6 +33,7 @@ Es8388AudioCodec::Es8388AudioCodec(void* i2c_master_handle, i2c_port_t i2c_port,
     output_sample_rate_ = output_sample_rate;
     // 记录功率放大器引脚
     pa_pin_ = pa_pin;
+    
     // 创建双工 I2S 通道，用于音频数据的输入和输出
     CreateDuplexChannels(mclk, bclk, ws, dout, din);
 

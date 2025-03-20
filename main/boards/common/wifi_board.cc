@@ -40,31 +40,51 @@ std::string WifiBoard::GetBoardType() {
 }
 
 // 进入WiFi配置模式的函数
+// 进入WiFi配置模式的函数
 void WifiBoard::EnterWifiConfigMode() {
+    // 获取应用程序单例对象
     auto& application = Application::GetInstance();
-    application.SetDeviceState(kDeviceStateWifiConfiguring);  // 设置设备状态为WiFi配置中
+    // 设置设备状态为WiFi配置中（用于状态管理和UI显示）
+    application.SetDeviceState(kDeviceStateWifiConfiguring);  
 
+    // 获取WiFi配置热点单例对象
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
-    wifi_ap.SetLanguage(Lang::CODE);  // 设置语言
-    wifi_ap.SetSsidPrefix("Xiaozhi");  // 设置WiFi热点的SSID前缀
-    wifi_ap.Start();  // 启动WiFi配置热点
+    // 设置热点的语言环境（根据系统语言动态切换）
+    wifi_ap.SetLanguage(Lang::CODE);  
+    // 设置WiFi热点的SSID前缀（便于用户识别）
+    wifi_ap.SetSsidPrefix("Xiaozhi");  
+    // 启动WiFi配置热点（创建AP并初始化Web服务器）
+    wifi_ap.Start();  
 
-    // 显示WiFi配置热点的SSID和Web服务器URL
+    // 构建用户提示信息
     std::string hint = Lang::Strings::CONNECT_TO_HOTSPOT;
+    // 添加生成的热点SSID到提示信息
     hint += wifi_ap.GetSsid();
+    // 添加访问方式提示（通过浏览器配置）
     hint += Lang::Strings::ACCESS_VIA_BROWSER;
+    // 添加Web服务器URL到提示信息
     hint += wifi_ap.GetWebServerUrl();
+    // 添加换行分隔符
     hint += "\n\n";
     
-    // 播报配置WiFi的提示
-    application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::P3_WIFICONFIG);
+    // 触发系统提示（语音播报+屏幕显示）
+    application.Alert(
+        Lang::Strings::WIFI_CONFIG_MODE,  // 提示标题
+        hint.c_str(),                    // 详细内容
+        "",                              // 图标名称（留空不显示）
+        Lang::Sounds::P3_WIFICONFIG      // 提示音文件
+    );
     
-    // 等待配置完成，设备重启
+    // 进入等待配置完成的循环（设备将在此循环中保持运行）
     while (true) {
-        int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);  // 获取当前空闲内存
-        int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);  // 获取最小空闲内存
-        ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);  // 记录内存信息
-        vTaskDelay(pdMS_TO_TICKS(10000));  // 延迟10秒
+        // 获取内部内存的当前空闲大小
+        int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);  
+        // 获取内部内存的最小历史空闲大小
+        int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);  
+        // 打印内存使用情况（用于调试和内存监控）
+        ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);  
+        // 延迟10秒后再次检查内存（避免高频打印影响性能）
+        vTaskDelay(pdMS_TO_TICKS(10000));  
     }
 }
 
@@ -72,45 +92,74 @@ void WifiBoard::EnterWifiConfigMode() {
 void WifiBoard::StartNetwork() {
     // 如果强制进入WiFi配置模式，则直接进入配置模式
     if (wifi_config_mode_) {
+        // 调用进入WiFi配置模式的函数
         EnterWifiConfigMode();
+        // 函数执行完毕，直接返回
         return;
     }
 
     // 如果没有配置WiFi SSID，则进入WiFi配置模式
+    // 获取SsidManager的单例对象，用于管理WiFi的SSID列表
     auto& ssid_manager = SsidManager::GetInstance();
+    // 从SsidManager中获取存储的WiFi SSID列表
     auto ssid_list = ssid_manager.GetSsidList();
+    // 检查SSID列表是否为空
     if (ssid_list.empty()) {
+        // 如果为空，将强制进入WiFi配置模式的标志设置为true
         wifi_config_mode_ = true;
+        // 调用进入WiFi配置模式的函数
         EnterWifiConfigMode();
+        // 函数执行完毕，直接返回
         return;
     }
 
     // 初始化WiFi Station模式
+    // 获取WifiStation的单例对象，用于控制WiFi的Station模式
     auto& wifi_station = WifiStation::GetInstance();
+    // 注册WiFi扫描开始的回调函数
     wifi_station.OnScanBegin([this]() {
+        // 获取显示设备的实例
         auto display = Board::GetInstance().GetDisplay();
-        display->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);  // 显示扫描WiFi的通知
+        // 显示扫描WiFi的通知，持续30000毫秒
+        display->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);  
     });
+    // 注册WiFi连接开始的回调函数
     wifi_station.OnConnect([this](const std::string& ssid) {
+        // 获取显示设备的实例
         auto display = Board::GetInstance().GetDisplay();
+        // 构建连接WiFi的通知消息
         std::string notification = Lang::Strings::CONNECT_TO;
+        // 将目标WiFi的SSID添加到通知消息中
         notification += ssid;
+        // 完善通知消息的格式
         notification += "...";
-        display->ShowNotification(notification.c_str(), 30000);  // 显示连接WiFi的通知
+        // 显示连接WiFi的通知，持续30000毫秒
+        display->ShowNotification(notification.c_str(), 30000);  
     });
+    // 注册WiFi连接成功的回调函数
     wifi_station.OnConnected([this](const std::string& ssid) {
+        // 获取显示设备的实例
         auto display = Board::GetInstance().GetDisplay();
+        // 构建已连接WiFi的通知消息
         std::string notification = Lang::Strings::CONNECTED_TO;
+        // 将已连接的WiFi的SSID添加到通知消息中
         notification += ssid;
-        display->ShowNotification(notification.c_str(), 30000);  // 显示已连接WiFi的通知
+        // 显示已连接WiFi的通知，持续30000毫秒
+        display->ShowNotification(notification.c_str(), 30000);  
     });
-    wifi_station.Start();  // 启动WiFi Station
+    // 启动WiFi Station模式，开始进行WiFi扫描和连接操作
+    wifi_station.Start();  
 
     // 尝试连接WiFi，如果失败则启动WiFi配置热点
+    // 等待WiFi连接，最多等待60 * 1000毫秒（即60秒）
     if (!wifi_station.WaitForConnected(60 * 1000)) {
+        // 如果超时仍未连接成功，停止WiFi Station模式
         wifi_station.Stop();
+        // 将强制进入WiFi配置模式的标志设置为true
         wifi_config_mode_ = true;
+        // 调用进入WiFi配置模式的函数
         EnterWifiConfigMode();
+        // 函数执行完毕，直接返回
         return;
     }
 }
@@ -121,15 +170,23 @@ Http* WifiBoard::CreateHttp() {
 }
 
 // 创建WebSocket对象的函数
+// 创建WebSocket实例的方法
 WebSocket* WifiBoard::CreateWebSocket() {
-#ifdef CONFIG_CONNECTION_TYPE_WEBSOCKET
+#ifdef CONFIG_CONNECTION_TYPE_WEBSOCKET  // 条件编译：仅当配置了WebSocket连接类型时编译此代码
+    // 从配置系统获取WebSocket服务器URL
     std::string url = CONFIG_WEBSOCKET_URL;
+    
+    // 检查URL是否使用安全WebSocket协议（wss://）
     if (url.find("wss://") == 0) {
-        return new WebSocket(new TlsTransport());  // 使用TLS传输层
+        // 创建使用TLS加密传输层的WebSocket实例
+        return new WebSocket(new TlsTransport());  // TLS传输层提供加密通信
     } else {
-        return new WebSocket(new TcpTransport());  // 使用TCP传输层
+        // 创建使用普通TCP传输层的WebSocket实例
+        return new WebSocket(new TcpTransport());  // TCP传输层提供明文通信
     }
-#endif
+#endif  // 结束条件编译块
+    
+    // 如果未启用WebSocket连接类型，返回空指针
     return nullptr;
 }
 

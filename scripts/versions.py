@@ -175,39 +175,63 @@ def post_info_to_server(info):
     """
     try:
         # 从环境变量获取服务器 URL 和 token
+        # 通过 os.environ.get 方法从环境变量中获取服务器的 URL
         server_url = os.environ.get('VERSIONS_SERVER_URL')
+        # 通过 os.environ.get 方法从环境变量中获取用于身份验证的 token
         server_token = os.environ.get('VERSIONS_TOKEN')
-        
+
+        # 检查是否成功获取到服务器 URL 和 token
+        # 如果 server_url 或 server_token 为空，说明环境变量配置不完整
         if not server_url or not server_token:
+            # 抛出异常，提示缺少必要的环境变量
             raise Exception("Missing SERVER_URL or TOKEN in environment variables")
 
         # 准备请求头和数据
+        # 构建请求头，包含身份验证信息和数据类型
         headers = {
+            # 使用 Bearer 令牌认证方式，将 token 放入 Authorization 字段
             'Authorization': f'Bearer {server_token}',
+            # 指定请求体的数据类型为 JSON
             'Content-Type': 'application/json'
         }
-        
+
         # 发送 POST 请求
+        # 使用 requests 库的 post 方法向服务器发送 POST 请求
         response = requests.post(
+            # 请求的目标 URL，即服务器的地址
             server_url,
+            # 传递请求头，包含身份验证和数据类型信息
             headers=headers,
+            # 将 info 字典转换为 JSON 字符串，并封装在 jsonData 键中作为请求体
             json={'jsonData': json.dumps(info)}
         )
-        
+
         # 检查响应状态
+        # 使用 raise_for_status 方法检查响应的状态码
+        # 如果状态码不是 200 系列，会抛出 HTTPError 异常
         response.raise_for_status()
-        
+
+        # 如果请求成功，打印上传成功的信息，包含固件信息中的 tag 字段
         print(f"Successfully uploaded version info for tag: {info['tag']}")
-        
+
+    # 捕获请求过程中可能出现的 RequestException 异常
     except RequestException as e:
+        # 检查响应对象是否有 json 方法，即响应是否为 JSON 格式
         if hasattr(e.response, 'json'):
+            # 从响应的 JSON 数据中获取 error 字段的值，如果不存在则使用异常的字符串表示
             error_msg = e.response.json().get('error', str(e))
         else:
+            # 如果响应不是 JSON 格式，直接使用异常的字符串表示作为错误信息
             error_msg = str(e)
+        # 打印上传失败的信息，包含具体的错误信息
         print(f"Failed to upload version info: {error_msg}")
+        # 重新抛出异常，以便上层调用者处理
         raise
+    # 捕获其他未知异常
     except Exception as e:
+        # 打印上传过程中出现的错误信息
         print(f"Error uploading version info: {str(e)}")
+        # 重新抛出异常，以便上层调用者处理
         raise
 
 def main():

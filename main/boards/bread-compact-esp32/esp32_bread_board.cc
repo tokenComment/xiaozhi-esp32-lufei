@@ -67,7 +67,7 @@ private:
 
         // ASR按钮点击事件
         asr_button_.OnClick([this]() {
-            std::string wake_word="你好小智"; // 唤醒词
+            std::string wake_word="你好笨蛋"; // 唤醒词
             Application::GetInstance().WakeWordInvoke(wake_word); // 唤醒词触发
         });
 

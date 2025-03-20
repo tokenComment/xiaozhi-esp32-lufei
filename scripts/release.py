@@ -55,15 +55,21 @@ def get_project_version():
                 return line.split("\"")[1].split("\"")[0].strip()
     return None
 
+# 此函数用于合并生成的二进制文件
 def merge_bin():
     """
     合并生成的二进制文件。
     如果合并失败，打印错误信息并退出程序。
     """
+    # 调用 idf.py 的 merge-bin 命令来合并二进制文件
+    # os.system 函数执行系统命令，若命令执行成功返回 0，否则返回非零值
     if os.system("idf.py merge-bin") != 0:
+        # 若合并失败，打印错误信息
         print("merge bin failed")
+        # 以状态码 1 退出程序，表示异常退出
         sys.exit(1)
 
+# 此函数用于将合并后的二进制文件打包成 ZIP 文件
 def zip_bin(board_type, project_version):
     """
     将合并后的二进制文件打包为 ZIP 文件。
@@ -71,46 +77,71 @@ def zip_bin(board_type, project_version):
     - board_type: 板子类型
     - project_version: 项目版本号
     """
+    # 检查 releases 目录是否存在，如果不存在则创建该目录
     if not os.path.exists("releases"):
         os.makedirs("releases")
+    # 定义 ZIP 文件的输出路径
     output_path = f"releases/v{project_version}_{board_type}.zip"
+    # 如果该 ZIP 文件已经存在，则删除它
     if os.path.exists(output_path):
         os.remove(output_path)
+    # 调用 zip 命令将 build 目录下的 merged-binary.bin 文件打包到指定的 ZIP 文件中
     if os.system(f"zip -j {output_path} build/merged-binary.bin") != 0:
+        # 若打包失败，打印错误信息
         print("zip bin failed")
+        # 以状态码 1 退出程序，表示异常退出
         sys.exit(1)
+    # 若打包成功，打印打包完成的信息
     print(f"zip bin to {output_path} done")
 
+# 此函数用于发布当前配置的板子类型和项目版本
 def release_current():
     """
     发布当前配置的板子类型和项目版本。
     """
+    # 调用 merge_bin 函数合并二进制文件
     merge_bin()
+    # 调用 get_board_type 函数获取当前板子类型
     board_type = get_board_type()
+    # 打印当前板子类型
     print("board type:", board_type)
+    # 调用 get_project_version 函数获取当前项目版本号
     project_version = get_project_version()
+    # 打印当前项目版本号
     print("project version:", project_version)
+    # 调用 zip_bin 函数将合并后的二进制文件打包
     zip_bin(board_type, project_version)
 
+# 此函数用于从 CMakeLists.txt 文件中提取所有板子类型及其配置
 def get_all_board_types():
     """
     从 CMakeLists.txt 中提取所有板子类型及其配置。
     返回值: 包含板子配置的字典，键为配置名，值为板子类型。
     """
+    # 初始化一个空字典，用于存储板子配置
     board_configs = {}
-    with open("main/CMakeLists.txt") as f:
+    # 打开 main 目录下的 CMakeLists.txt 文件
+    with open("main/CMakeLists.txt", encoding="utf-8") as f:
+        # 读取文件的所有行
         lines = f.readlines()
+        # 遍历每一行及其索引
         for i, line in enumerate(lines):
-            # 查找 if(CONFIG_BOARD_TYPE_*) 行
+            # 查找包含 if(CONFIG_BOARD_TYPE_*) 的行
             if "if(CONFIG_BOARD_TYPE_" in line:
+                # 提取配置名
                 config_name = line.strip().split("if(")[1].split(")")[0]
-                # 查找下一行的 set(BOARD_TYPE "xxx")
+                # 获取下一行并去除首尾空格
                 next_line = lines[i + 1].strip()
+                # 检查下一行是否以 set(BOARD_TYPE 开头
                 if next_line.startswith("set(BOARD_TYPE"):
+                    # 提取板子类型
                     board_type = next_line.split('"')[1]
+                    # 将配置名和板子类型添加到字典中
                     board_configs[config_name] = board_type
+    # 返回包含板子配置的字典
     return board_configs
 
+# 此函数用于发布指定板子类型的固件
 def release(board_type, board_config):
     """
     发布指定板子类型的固件。
@@ -118,74 +149,105 @@ def release(board_type, board_config):
     - board_type: 板子类型
     - board_config: 板子配置名
     """
+    # 定义板子配置文件的路径
     config_path = f"main/boards/{board_type}/config.json"
+    # 检查配置文件是否存在，如果不存在则跳过该板子类型
     if not os.path.exists(config_path):
         print(f"跳过 {board_type} 因为 config.json 不存在")
         return
 
-    # 打印项目版本号
+    # 调用 get_project_version 函数获取项目版本号
     project_version = get_project_version()
+    # 打印项目版本号
     print(f"Project Version: {project_version}")
+    # 定义发布文件的路径
     release_path = f"releases/v{project_version}_{board_type}.zip"
+    # 检查发布文件是否已经存在，如果存在则跳过该板子类型
     if os.path.exists(release_path):
         print(f"跳过 {board_type} 因为 {release_path} 已存在")
         return
 
+    # 打开配置文件并加载 JSON 数据
     with open(config_path, "r") as f:
         config = json.load(f)
+    # 从配置中获取目标设备
     target = config["target"]
+    # 从配置中获取构建信息列表
     builds = config["builds"]
     
+    # 遍历每个构建信息
     for build in builds:
+        # 获取构建名称
         name = build["name"]
+        # 检查构建名称是否以板子类型开头，如果不是则抛出异常
         if not name.startswith(board_type):
             raise ValueError(f"name {name} 必须 {board_type} 开头")
 
+        # 初始化 sdkconfig 追加配置列表
         sdkconfig_append = [f"{board_config}=y"]
+        # 遍历构建信息中的 sdkconfig_append 列表，并添加到 sdkconfig_append 中
         for append in build.get("sdkconfig_append", []):
             sdkconfig_append.append(append)
+        # 打印构建名称
         print(f"name: {name}")
+        # 打印目标设备
         print(f"target: {target}")
+        # 打印 sdkconfig 追加配置
         for append in sdkconfig_append:
             print(f"sdkconfig_append: {append}")
         # 取消设置 IDF_TARGET 环境变量
         os.environ.pop("IDF_TARGET", None)
-        # 调用 set-target
+        # 调用 idf.py 的 set-target 命令设置目标设备
         if os.system(f"idf.py set-target {target}") != 0:
+            # 若设置目标设备失败，打印错误信息
             print("set-target failed")
+            # 以状态码 1 退出程序，表示异常退出
             sys.exit(1)
-        # 追加 sdkconfig 配置
+        # 打开 sdkconfig 文件并追加 sdkconfig 配置
         with open("sdkconfig", "a") as f:
             f.write("\n")
             for append in sdkconfig_append:
                 f.write(f"{append}\n")
-        # 使用宏 BOARD_NAME 构建
+        # 调用 idf.py 的 build 命令进行构建，使用宏 BOARD_NAME
         if os.system(f"idf.py -DBOARD_NAME={name} build") != 0:
+            # 若构建失败，打印错误信息
             print("build failed")
+            # 以状态码 1 退出程序，表示异常退出
             sys.exit(1)
-        # 合并二进制文件
+        # 调用 idf.py 的 merge-bin 命令合并二进制文件
         if os.system("idf.py merge-bin") != 0:
+            # 若合并二进制文件失败，打印错误信息
             print("merge-bin failed")
+            # 以状态码 1 退出程序，表示异常退出
             sys.exit(1)
-        # 打包二进制文件
+        # 调用 zip_bin 函数将合并后的二进制文件打包
         zip_bin(name, project_version)
+        # 打印分隔线
         print("-" * 80)
 
 if __name__ == "__main__":
+    # 检查命令行参数的数量是否大于 1
     if len(sys.argv) > 1:
-        # 获取所有板子类型
+        # 调用 get_all_board_types 函数获取所有板子类型及其配置
         board_configs = get_all_board_types()
+        # 初始化一个标志变量，用于标记是否找到匹配的板子类型
         found = False
+        # 遍历所有板子配置
         for board_config, board_type in board_configs.items():
-            # 如果命令行参数是 'all' 或匹配当前板子类型，则发布
+            # 检查命令行参数是否为 'all' 或者与当前板子类型匹配
             if sys.argv[1] == 'all' or board_type == sys.argv[1]:
+                # 若匹配，则调用 release 函数发布该板子类型的固件
                 release(board_type, board_config)
+                # 将标志变量设置为 True，表示找到匹配的板子类型
                 found = True
+        # 若未找到匹配的板子类型
         if not found:
+            # 打印未找到板子类型的信息
             print(f"未找到板子类型: {sys.argv[1]}")
+            # 打印可用的板子类型信息
             print("可用的板子类型:")
             for board_type in board_configs.values():
                 print(f"  {board_type}")
     else:
-        # 如果没有命令行参数，发布当前配置
+        # 若没有命令行参数，则调用 release_current 函数发布当前配置
         release_current()

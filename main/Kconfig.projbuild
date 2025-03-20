@@ -38,7 +38,7 @@ endchoice
 config WEBSOCKET_URL
     depends on CONNECTION_TYPE_WEBSOCKET
     string "Websocket URL"
-    default "wss://api.tenclass.net/xiaozhi/v1/"
+    default "ws://192.168.2.107:8000/xiaozhi/v1/"
     help
         Communication with the server through websocket after wake up.
 

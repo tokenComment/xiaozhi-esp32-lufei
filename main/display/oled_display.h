@@ -17,6 +17,7 @@ private:
     lv_obj_t* content_right_ = nullptr;
     lv_obj_t* container_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
+    lv_obj_t * low_battery_popup_= nullptr;
 
     DisplayFonts fonts_;
 
